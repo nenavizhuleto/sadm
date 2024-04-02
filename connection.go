@@ -16,7 +16,7 @@ func newConnection(c net.Conn) *Connection {
 }
 
 func (c *Connection) Addr() string {
-	return c.c.LocalAddr().String()
+	return c.c.RemoteAddr().String()
 }
 
 func (c *Connection) Printf(format string, args ...any) error {

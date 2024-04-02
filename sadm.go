@@ -14,14 +14,19 @@ type SAdm struct {
 	mx       sync.Mutex
 	commands []command
 
+	channel *Channel
+
 	onConnection func(s *SAdm, c *Connection) error
 }
 
 func New(name string) *SAdm {
 	return &SAdm{
-		Name:     name,
-		Prefix:   ">>>",
+		Name:   name,
+		Prefix: ">>>",
+
 		commands: make([]command, 0),
+
+		channel: newChannel(name),
 
 		// Default greetings message
 		onConnection: func(s *SAdm, c *Connection) error {
@@ -35,6 +40,15 @@ func New(name string) *SAdm {
 			return nil
 		},
 	}
+}
+
+// Broadcast sends messages to main channel
+func (s *SAdm) Broadcast(format string, args ...any) []error {
+	return s.channel.Broadcast(format, args...)
+}
+
+func (s *SAdm) NewChannel(name string) *Channel {
+	return newChannel(name)
 }
 
 // Listen starts listening on provided port
@@ -93,8 +107,9 @@ func (s *SAdm) handleConnection(c *Connection) {
 		err  error
 	)
 
+	s.channel.Subscribe(*c)
 	defer func() {
-		log.Printf("connection %v lost: %v\n", addr, err)
+		s.channel.Unsubscribe(addr)
 		c.Close()
 	}()
 
