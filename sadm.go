@@ -2,7 +2,6 @@ package sadm
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"sync"
 )
@@ -12,7 +11,7 @@ type SAdm struct {
 	Prefix string
 
 	mx       sync.Mutex
-	commands []command
+	commands []Command
 
 	channel *Channel
 
@@ -24,7 +23,7 @@ func New(name string) *SAdm {
 		Name:   name,
 		Prefix: ">>>",
 
-		commands: make([]command, 0),
+		commands: make([]Command, 0),
 
 		channel: newChannel(name),
 
@@ -54,13 +53,8 @@ func (s *SAdm) NewChannel(name string) *Channel {
 // Listen starts listening on provided port
 // and sets default commands: 'help' and 'exit'
 func (s *SAdm) Listen(port string) error {
-
 	s.AddCommand("help", "show help", func(c *Connection) error {
-		c.Printf("available commands:\n")
-		for _, cmd := range s.commands {
-			c.Printf(cmd.String())
-		}
-		return nil
+		return PrintHelp(c, s.commands)
 	})
 
 	s.AddCommand("exit", "terminate session", func(c *Connection) error {
@@ -68,7 +62,7 @@ func (s *SAdm) Listen(port string) error {
 		return c.Close()
 	})
 
-	ls, err := net.Listen("tcp", ":3999")
+	ls, err := net.Listen("tcp", port)
 	if err != nil {
 		return err
 	}
@@ -76,11 +70,33 @@ func (s *SAdm) Listen(port string) error {
 	for {
 		c, err := ls.Accept()
 		if err != nil {
-			log.Println("SAdm: ", err)
 			continue
 		}
 		go s.handleConnection(newConnection(c))
 	}
+}
+
+func (s *SAdm) Use(p Plugin) {
+	commands := p.Commands()
+	// Usage: net ip
+	// net	- plugin name
+	// ip	- plugin 'ip' command
+	s.AddCommand(p.Name(), p.Description(), func(c *Connection) error {
+		// Read next command
+		cmd, err := s.read(c)
+		if err != nil {
+			return err
+		}
+
+		for _, command := range commands {
+			if command.Name == cmd {
+				return command.Execute(c)
+			}
+		}
+
+		// Handle unknown command
+		return p.Help(c)
+	})
 }
 
 // AddCommand Adds command to SAdm. it panics if command already exists
@@ -90,13 +106,13 @@ func (s *SAdm) AddCommand(name string, desc string, handler Handler) {
 		panic(fmt.Errorf("command already exists: %s", name))
 	}
 
-	s.addCommand(name, desc, handler)
+	cmd := NewCommand(name, desc, handler)
+	s.addCommand(cmd)
 }
 
-func (s *SAdm) addCommand(name string, desc string, handler Handler) {
+func (s *SAdm) addCommand(cmd Command) {
 	s.mx.Lock()
 	defer s.mx.Unlock()
-	cmd := newCommand(name, desc, handler)
 	s.commands = append(s.commands, cmd)
 }
 
@@ -126,33 +142,39 @@ func (s *SAdm) handleConnection(c *Connection) {
 	err = s.repl(c)
 }
 
-func (s *SAdm) findCommand(cmd string) (command, bool) {
+func (s *SAdm) findCommand(cmd string) (Command, bool) {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 	for _, command := range s.commands {
-		if command.name == cmd {
+		if command.Name == cmd {
 			return command, true
 		}
 	}
-	return command{}, false
+	return Command{}, false
 }
 
 func (s *SAdm) execute(cmd string, c *Connection) error {
 	if command, ok := s.findCommand(cmd); ok {
 		return command.Execute(c)
 	} else {
-		return fmt.Errorf("unknown command: %s\n", cmd)
+		return unknownCommandErr(cmd)
 	}
+}
+
+func (s *SAdm) read(c *Connection) (string, error) {
+	var cmd string
+	err := c.Scanf("%s", &cmd)
+	return cmd, err
 }
 
 func (s *SAdm) repl(c *Connection) (err error) {
 	for {
-		var cmd string
 		if err = c.Printf("%s ", s.Prefix); err != nil {
 			return
 		}
-		if err := c.Scanf("%s", &cmd); err != nil {
-			c.Printf("%s\n", err)
+		cmd, err := s.read(c)
+		if err != nil {
+			c.Printf("%s\n", err.Error())
 			continue
 		}
 		if err := s.execute(cmd, c); err != nil {

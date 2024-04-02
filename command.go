@@ -6,24 +6,24 @@ import (
 
 type Handler func(*Connection) error
 
-type command struct {
-	name        string
-	description string
+type Command struct {
+	Name        string
+	Description string
 	handler     Handler
 }
 
-func newCommand(name, desc string, handler Handler) command {
-	return command{
-		name:        name,
-		description: desc,
+func NewCommand(name, desc string, handler Handler) Command {
+	return Command{
+		Name:        name,
+		Description: desc,
 		handler:     handler,
 	}
 }
 
-func (c command) Execute(connection *Connection) error {
+func (c Command) Execute(connection *Connection) error {
 	return c.handler(connection)
 }
 
-func (c command) String() string {
-	return fmt.Sprintf("%s\t-\t%s\n", c.name, c.description)
+func (c Command) String() string {
+	return fmt.Sprintf("%s\t-\t%s\n", c.Name, c.Description)
 }
