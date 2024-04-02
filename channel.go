@@ -9,18 +9,18 @@ type Channel struct {
 	Name string
 
 	mx   sync.Mutex
-	cons map[string]Connection
+	cons map[string]*Connection
 }
 
 func newChannel(name string) *Channel {
 	return &Channel{
 		Name: name,
-		cons: make(map[string]Connection, 0),
+		cons: make(map[string]*Connection, 0),
 	}
 }
 
 // Subscribe subscribes connection to the channel
-func (c *Channel) Subscribe(con Connection) {
+func (c *Channel) Subscribe(con *Connection) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 	c.cons[con.Addr()] = con

@@ -85,13 +85,17 @@ func (s *SAdm) Listen(port string) error {
 
 // AddCommand Adds command to SAdm. it panics if command already exists
 func (s *SAdm) AddCommand(name string, desc string, handler Handler) {
-	s.mx.Lock()
-	defer s.mx.Unlock()
 
 	if _, ok := s.findCommand(name); ok {
 		panic(fmt.Errorf("command already exists: %s", name))
 	}
 
+	s.addCommand(name, desc, handler)
+}
+
+func (s *SAdm) addCommand(name string, desc string, handler Handler) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
 	cmd := newCommand(name, desc, handler)
 	s.commands = append(s.commands, cmd)
 }
@@ -107,7 +111,7 @@ func (s *SAdm) handleConnection(c *Connection) {
 		err  error
 	)
 
-	s.channel.Subscribe(*c)
+	s.channel.Subscribe(c)
 	defer func() {
 		s.channel.Unsubscribe(addr)
 		c.Close()
@@ -123,6 +127,8 @@ func (s *SAdm) handleConnection(c *Connection) {
 }
 
 func (s *SAdm) findCommand(cmd string) (command, bool) {
+	s.mx.Lock()
+	defer s.mx.Unlock()
 	for _, command := range s.commands {
 		if command.name == cmd {
 			return command, true
@@ -132,9 +138,6 @@ func (s *SAdm) findCommand(cmd string) (command, bool) {
 }
 
 func (s *SAdm) execute(cmd string, c *Connection) error {
-	s.mx.Lock()
-	defer s.mx.Unlock()
-
 	if command, ok := s.findCommand(cmd); ok {
 		return command.Execute(c)
 	} else {

@@ -13,7 +13,7 @@ func main() {
 	ch := s.NewChannel("room")
 
 	s.AddCommand("room", "another broadcast", func(c *sadm.Connection) error {
-		ch.Subscribe(*c)
+		ch.Subscribe(c)
 
 		go func() {
 			<-time.After(5 * time.Second)
