@@ -6,6 +6,15 @@ import (
 	"sync"
 )
 
+type state int
+
+const (
+	_ state = iota
+	ready
+	opened
+	closed
+)
+
 type SAdm struct {
 	Name   string
 	Prefix string
@@ -14,6 +23,8 @@ type SAdm struct {
 	commands []Command
 
 	channel *Channel
+	ls      net.Listener
+	state   state
 
 	onConnection func(s *SAdm, c *Connection) error
 }
@@ -26,6 +37,7 @@ func New(name string) *SAdm {
 		commands: make([]Command, 0),
 
 		channel: newChannel(name),
+		state:   ready,
 
 		// Default greetings message
 		onConnection: func(s *SAdm, c *Connection) error {
@@ -50,6 +62,20 @@ func (s *SAdm) NewChannel(name string) *Channel {
 	return newChannel(name)
 }
 
+func (s *SAdm) Close() error {
+	s.set_state(closed)
+	s.ls.Close()
+	return s.channel.Close()
+}
+
+func (s *SAdm) IsClosed() bool {
+	return s.state == closed
+}
+
+func (s *SAdm) IsOpened() bool {
+	return s.state == opened
+}
+
 // Listen starts listening on provided port
 // and sets default commands: 'help' and 'exit'
 func (s *SAdm) Listen(port string) error {
@@ -67,13 +93,18 @@ func (s *SAdm) Listen(port string) error {
 		return err
 	}
 
-	for {
+	s.set_state(opened)
+	s.ls = ls
+
+	for s.IsOpened() {
 		c, err := ls.Accept()
 		if err != nil {
 			continue
 		}
 		go s.handleConnection(newConnection(c))
 	}
+
+	return nil
 }
 
 func (s *SAdm) Use(p Plugin) {
@@ -167,8 +198,12 @@ func (s *SAdm) read(c *Connection) (string, error) {
 	return cmd, err
 }
 
+func (s *SAdm) set_state(state state) {
+	s.state = state
+}
+
 func (s *SAdm) repl(c *Connection) (err error) {
-	for {
+	for s.IsOpened() {
 		if err = c.Printf("%s ", s.Prefix); err != nil {
 			return
 		}
@@ -182,4 +217,6 @@ func (s *SAdm) repl(c *Connection) (err error) {
 			continue
 		}
 	}
+
+	return
 }

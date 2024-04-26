@@ -34,6 +34,16 @@ func (c *Channel) Unsubscribe(addr string) {
 	delete(c.cons, addr)
 }
 
+// Close closes all channel connections
+func (c *Channel) Close() (err error) {
+	for name, conn := range c.cons {
+		err = conn.Close()
+		delete(c.cons, name)
+	}
+
+	return
+}
+
 // Broadcast sends message to all channel subscribers
 func (c *Channel) Broadcast(format string, args ...any) []error {
 	c.mx.Lock()
